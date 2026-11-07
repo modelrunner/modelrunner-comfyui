@@ -1,0 +1,224 @@
+{
+  "id": "9d9e6aef-67db-4334-bae0-9f3d9d277c51",
+  "revision": 0,
+  "last_node_id": 2,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "ModelRunner_black-forest-labs__flux-2",
+      "pos": [
+        100,
+        130
+      ],
+      "size": [
+        400,
+        370
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "image_size",
+          "name": "image_size",
+          "type": "COMBO",
+          "widget": {
+            "name": "image_size"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "num_inference_steps",
+          "name": "num_inference_steps",
+          "type": "INT",
+          "widget": {
+            "name": "num_inference_steps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "guidance_scale",
+          "name": "guidance_scale",
+          "shape": 7,
+          "type": "FLOAT",
+          "widget": {
+            "name": "guidance_scale"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "shape": 7,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "num_images",
+          "name": "num_images",
+          "shape": 7,
+          "type": "INT",
+          "widget": {
+            "name": "num_images"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "extra_json",
+          "name": "extra_json",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "extra_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "force_rerun",
+          "name": "force_rerun",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "force_rerun"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "mask",
+          "name": "mask",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "localized_name": "urls",
+          "name": "urls",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "request_id",
+          "name": "request_id",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ModelRunner_black-forest-labs__flux-2"
+      },
+      "widgets_values": [
+        "A ceramic coffee cup on a sunlit wooden table, soft morning light, product photo",
+        "4_3_1k",
+        28,
+        2.5,
+        0,
+        "fixed",
+        1,
+        "{}",
+        false
+      ],
+      "widgets_values_named": {
+        "prompt": "A ceramic coffee cup on a sunlit wooden table, soft morning light, product photo",
+        "image_size": "4_3_1k",
+        "num_inference_steps": 28,
+        "guidance_scale": 2.5,
+        "seed": 0,
+        "control_after_generate": "fixed",
+        "num_images": 1,
+        "extra_json": "{}",
+        "force_rerun": false
+      }
+    },
+    {
+      "id": 2,
+      "type": "SaveImage",
+      "pos": [
+        600,
+        130
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "modelrunner/text-to-image"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "modelrunner/text-to-image"
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

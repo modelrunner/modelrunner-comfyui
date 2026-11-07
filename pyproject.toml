@@ -1,0 +1,17 @@
+[project]
+name = "modelrunner"
+description = "Run hundreds of image, video, audio and 3D AI models from ComfyUI with one ModelRunner API key: one typed node per model, plus a run-any-model node."
+version = "0.1.0"
+license = { file = "LICENSE" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/modelrunner/modelrunner-comfyui"
+Documentation = "https://modelrunner.ai/docs"
+"Bug Tracker" = "https://github.com/modelrunner/modelrunner-comfyui/issues"
+
+[tool.comfy]
+PublisherId = "REPLACE_WITH_REGISTRY_PUBLISHER_ID"
+DisplayName = "ModelRunner"
+Icon = ""  # REPLACE with the ModelRunner brand mark URL (square, 400x400)
+includes = []
