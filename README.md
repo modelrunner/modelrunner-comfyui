@@ -58,7 +58,13 @@ time you shared an image.
    request ID. Video and 3D nodes download every result into
    `output/modelrunner/` and output the file paths and URLs. Audio nodes output
    the first result as AUDIO, plus every file path and URL. Multi-value outputs
-   hold one entry per line.
+   hold one entry per line. Video, 3D and audio nodes run even with nothing
+   connected after them; connect `file_paths` to a Preview Any node to see where
+   the files went.
+
+Four example workflows ship with the pack and appear in ComfyUI's template
+browser under this pack's name: text to image, an image mask from a loaded
+image, image to video, and a language model through the run-any-model node.
 
 Fields that have no widget (lists of objects, such as LoRA lists) can be set in
 the node's `extra_json` box as a JSON object. It is merged last, so it also
