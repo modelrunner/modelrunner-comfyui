@@ -27,7 +27,7 @@ MULTILINE_HINT = re.compile(r"prompt|text|lyrics|script|instruction|description|
 @dataclass
 class FieldPlan:
     name: str
-    kind: str  # enum | bool | int | float | string | image | images | audio | url | urls | object
+    kind: str  # enum | bool | int | float | string | image | images | audio | video | url | urls | object
     required: bool
     comfy_type: Any  # "INT", "IMAGE", ... or a list of COMBO choices
     options: dict = field(default_factory=dict)
@@ -78,7 +78,7 @@ def _media_kind(name: str, input_modalities: list[str]) -> str:
     if AUDIO_HINT.search(name):
         return "audio"
     if VIDEO_HINT.search(name) and not IMAGE_HINT.search(name):
-        return "url"
+        return "video"
     if IMAGE_HINT.search(name):
         return "image"
     media = [m for m in input_modalities if m in ("image", "audio", "video")]
@@ -154,6 +154,9 @@ def plan_field(name: str, raw: dict, required: bool, input_modalities: list[str]
             return FieldPlan(name, "image", required, "IMAGE", base)
         if kind == "audio":
             return FieldPlan(name, "audio", required, "AUDIO", base)
+        if kind == "video":
+            tip = f"{tooltip} (or put a video URL under this name in extra_json)".strip()
+            return FieldPlan(name, "video", required, "VIDEO", {"tooltip": tip})
         return FieldPlan(name, "url", required, "STRING", {**base, "default": ""})
 
     if t == "array" and _is_uri(normalize(s.get("items", {}))):
@@ -242,8 +245,10 @@ def input_types(plans: list[FieldPlan]) -> dict:
     def put(p: FieldPlan, wname: str):
         # Sockets that may stay unconnected, and fields the catalog marks advanced,
         # go in "optional"; ComfyUI then passes nothing for an unconnected socket.
-        socket = p.comfy_type in ("IMAGE", "AUDIO") or p.options.get("forceInput")
-        target = req if p.required or not (socket or p.advanced) else opt
+        # A VIDEO socket is always optional so a required video URL can come from
+        # extra_json instead; the node checks one of the two is set before it runs.
+        socket = p.comfy_type in ("IMAGE", "AUDIO", "VIDEO") or p.options.get("forceInput")
+        target = req if (p.required and p.kind != "video") or not (socket or p.advanced) else opt
         target[wname] = (p.comfy_type, p.options) if p.options else (p.comfy_type,)
 
     for p in plans:

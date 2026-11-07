@@ -1,0 +1,6 @@
+# Kept out of the zip published to the Comfy Registry: maintainer tooling and CI
+# never run inside ComfyUI. The Registry icon is served from the GitHub raw URL.
+scripts/
+.github/
+.gitignore
+assets/

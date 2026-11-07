@@ -27,7 +27,9 @@ cd ComfyUI/custom_nodes
 git clone https://github.com/modelrunner/modelrunner-comfyui
 ```
 
-The pack needs nothing beyond what ComfyUI already installs.
+The pack needs nothing beyond what ComfyUI already installs. Use ComfyUI 0.12.1
+or newer: older versions still load every node, but video and 3D nodes then
+output only file paths and URLs.
 
 ## Your API key
 
@@ -49,18 +51,20 @@ time you shared an image.
 
 ## Using the nodes
 
-1. Add a model's node, connect an image or audio socket if it has one, and set
-   the widgets. Optional sockets can stay unconnected.
+1. Add a model's node, connect an image, audio or video socket if it has one,
+   and set the widgets. Optional sockets can stay unconnected. A video socket
+   takes a VIDEO from Load Video or another node; to pass a video URL instead,
+   leave the socket empty and set it in `extra_json`, e.g.
+   `{"video_url": "https://..."}`.
 2. Queue the prompt. The console prints the request ID and the model's average
    cost per run; a progress bar shows while the run is queued and working.
 3. Image nodes output an IMAGE batch, a MASK (from the alpha channel, so
    background-removal results work like LoadImage's), the output URLs and the
-   request ID. Video and 3D nodes download every result into
-   `output/modelrunner/` and output the file paths and URLs. Audio nodes output
-   the first result as AUDIO, plus every file path and URL. Multi-value outputs
-   hold one entry per line. Video, 3D and audio nodes run even with nothing
-   connected after them; connect `file_paths` to a Preview Any node to see where
-   the files went.
+   request ID. Video, 3D and audio nodes download every result into
+   `output/modelrunner/` and output the first result as a typed value (VIDEO
+   for Save Video, a 3D file for Save 3D Model or Preview 3D, AUDIO for Save
+   Audio), plus every file path and URL. Multi-value outputs hold one entry per
+   line. Video, 3D and audio nodes run even with nothing connected after them.
 
 Four example workflows ship with the pack and appear in ComfyUI's template
 browser under this pack's name: text to image, an image mask from a loaded
@@ -91,7 +95,7 @@ this pack was released. Current prices are on the model page.
 
 ## Privacy
 
-Images and audio connected to a node are uploaded so the model can fetch them.
+Images, audio and video connected to a node are uploaded so the model can fetch them.
 Each upload is stored on ModelRunner's media host under an unguessable URL,
 and so are the results. Do not connect anything you would not upload to a cloud
 service.
@@ -118,8 +122,11 @@ field that only `extra_json` can set. The deny-list is not in the repo: set
 `MODELRUNNER_DENYLIST` or create `scripts/denylist.txt` (git-ignored). CI reads
 the `MODELRUNNER_DENYLIST` repository secret.
 
-To release, bump `version` in `pyproject.toml`, commit, then push a matching
-tag (`v0.1.1`). The tag publishes to the Comfy Registry.
+To release, bump `version` in `pyproject.toml` (and `VERSION` in
+`modelrunner_nodes/client.py`), commit, then push a matching tag (`v0.2.0`).
+The tag publishes to the Comfy Registry. `.comfyignore` keeps `scripts/`, CI
+files and `assets/` out of the published zip, so only the files ComfyUI loads
+are scanned and shipped.
 
 ## License
 

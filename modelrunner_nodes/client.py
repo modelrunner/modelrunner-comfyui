@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 APP_TAG = "modelrunner-comfyui"
 API_BASE = os.environ.get("MODELRUNNER_API_BASE", "https://modelrunner.run").rstrip("/")
 QUEUE_BASE = os.environ.get("MODELRUNNER_QUEUE_BASE", "https://queue.modelrunner.run").rstrip("/")

@@ -25,6 +25,18 @@ try:  # present in every ComfyUI install; guarded so the mapper can be checked w
 except ImportError:  # pragma: no cover
     model_management = comfy_utils = folder_paths = None
 
+# ComfyUI's typed VIDEO and 3D file objects, from its versioned public API. Each is
+# looked up on its own: on a ComfyUI without one, that kind keeps STRING outputs, so
+# every node still registers.
+try:
+    from comfy_api.latest import InputImpl as _ComfyInputs, Types as _ComfyTypes
+except ImportError:  # pragma: no cover
+    _ComfyInputs = _ComfyTypes = None
+VideoFromFile = getattr(_ComfyInputs, "VideoFromFile", None)
+VideoCodec = getattr(_ComfyTypes, "VideoCodec", None)
+VideoContainer = getattr(_ComfyTypes, "VideoContainer", None)
+File3D = getattr(_ComfyTypes, "File3D", None)
+
 CATALOG = Path(__file__).resolve().parent.parent / "catalog.json"
 MODEL_PAGE = "https://modelrunner.ai/models/{endpoint}"
 
@@ -87,6 +99,17 @@ def audio_to_wav(audio: dict) -> bytes:
     return buf.getvalue()
 
 
+def video_to_mp4(video) -> bytes:
+    """ComfyUI VIDEO as MP4 (H.264) bytes. Re-encoding, as ComfyUI's own API nodes do,
+    keeps any trim or crop on the input and makes webm/mov sources a real MP4."""
+    if VideoContainer is None:
+        raise client.ModelRunnerError("This ComfyUI cannot encode VIDEO inputs; update ComfyUI, "
+                                      "or pass the video URL in extra_json.")
+    buf = io.BytesIO()
+    video.save_to(buf, format=VideoContainer.MP4, codec=VideoCodec.H264)
+    return buf.getvalue()
+
+
 def load_audio(path: str) -> dict:
     """Decode an audio file to ComfyUI AUDIO with ComfyUI's own loader (PyAV),
     falling back to torchaudio on installs that predate it."""
@@ -135,11 +158,20 @@ def _run(endpoint: str, payload: dict) -> dict:
 # ---------------------------------------------------------------- typed nodes
 
 # Multi-output runs (several images, several stems) return every URL, one per line.
+# Video, 3D and audio nodes return the first result as a typed object for core nodes
+# (Save Video, Save 3D Model, Save Audio), plus every saved file path and URL.
+_FILES = (("STRING", "STRING", "STRING"), ("file_paths", "urls", "request_id"))
+
+
+def _typed_first(comfy_type: str, name: str, available: bool) -> tuple:
+    return ((comfy_type, *_FILES[0]), (name, *_FILES[1])) if available else _FILES
+
+
 OUTPUTS = {
     "image": (("IMAGE", "MASK", "STRING", "STRING"), ("images", "mask", "urls", "request_id")),
-    "video": (("STRING", "STRING", "STRING"), ("file_paths", "urls", "request_id")),
-    "3d": (("STRING", "STRING", "STRING"), ("file_paths", "urls", "request_id")),
-    "audio": (("AUDIO", "STRING", "STRING", "STRING"), ("audio", "file_paths", "urls", "request_id")),
+    "video": _typed_first("VIDEO", "video", VideoFromFile is not None),
+    "3d": _typed_first("FILE_3D", "model_3d", File3D is not None),
+    "audio": _typed_first("AUDIO", "audio", True),
 }
 FALLBACK_EXT = {"video": "mp4", "3d": "glb", "audio": "mp3"}
 
@@ -171,9 +203,12 @@ class _ModelNode:
         return float("nan") if force_rerun else ""
 
     def _payload(self, kwargs: dict) -> dict:
-        # Fail before any upload when a required text field (prompt, video URL, ...) is still empty.
-        missing = [p.name for p in self.PLANS if p.required and p.comfy_type == "STRING"
-                   and not str(kwargs.get(p.name) or "").strip()]
+        extra = mapper.parse_extra_json(kwargs.get("extra_json", ""))
+        # Fail before any upload when a required text field or video is still missing.
+        # A VIDEO socket is always optional, so its URL can come from extra_json instead.
+        missing = [p.name for p in self.PLANS if p.required and p.name not in extra and (
+            (p.comfy_type == "STRING" and not str(kwargs.get(p.name) or "").strip())
+            or (p.kind == "video" and kwargs.get(p.name) is None))]
         if missing:
             raise client.ModelRunnerError(f"{self.ENDPOINT}: fill in {', '.join(missing)} (required).")
         payload: dict = {}
@@ -198,11 +233,14 @@ class _ModelNode:
                 payload[p.name] = [upload_image(value, i, f"{p.name}-{i}") for i in range(value.shape[0])]
             elif p.kind == "audio":
                 payload[p.name] = client.upload_bytes(audio_to_wav(value), f"{p.name}.wav", "audio/wav")
+            elif p.kind == "video":
+                if p.name not in extra:  # a URL in extra_json wins; skip the encode and upload
+                    payload[p.name] = client.upload_bytes(video_to_mp4(value), f"{p.name}.mp4", "video/mp4")
             else:
                 ok, v = mapper.to_api_value(p, value)
                 if ok:
                     payload[p.name] = v
-        payload.update(mapper.parse_extra_json(kwargs.get("extra_json", "")))
+        payload.update(extra)
         return payload
 
     def run(self, **kwargs):
@@ -219,9 +257,15 @@ class _ModelNode:
             images, mask = urls_to_images(urls)
             return (images, mask, joined, request_id)
         paths = [save_output(u, request_id, FALLBACK_EXT[self.KIND], i) for i, u in enumerate(urls)]
+        files = ("\n".join(paths), joined, request_id)
+        # The typed first output exists only when OUTPUTS gave this kind one (see _typed_first).
         if self.KIND == "audio":
-            return (load_audio(paths[0]), "\n".join(paths), joined, request_id)
-        return ("\n".join(paths), joined, request_id)
+            return (load_audio(paths[0]), *files)
+        if self.KIND == "video" and VideoFromFile is not None:
+            return (VideoFromFile(paths[0]), *files)
+        if self.KIND == "3d" and File3D is not None:
+            return (File3D(paths[0]), *files)
+        return files
 
 
 def _description(entry: dict) -> str:
@@ -335,6 +379,10 @@ def build_all() -> tuple[dict, dict]:
     A row that fails to build is skipped with one log line, so one bad row never
     takes the rest of the pack down."""
     classes, names = {}, {}
+    missing = [n for n, t in (("VIDEO", VideoFromFile), ("3D file", File3D)) if t is None]
+    if missing:
+        logging.warning(f"[ModelRunner] this ComfyUI has no {' or '.join(missing)} type; those nodes output "
+                        "file paths and URLs only. Update ComfyUI to get typed outputs.")
     for cls, label in ((ModelRunnerRun, "ModelRunner Run (any model)"),
                        (ModelRunnerUploadImage, "ModelRunner Upload Image"),
                        (ModelRunnerDownloadImage, "ModelRunner Download Image")):

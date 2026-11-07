@@ -1,8 +1,10 @@
 [project]
 name = "modelrunner"
 description = "Run hundreds of image, video, audio and 3D AI models from ComfyUI with one ModelRunner API key: one typed node per model, plus a run-any-model node."
-version = "0.1.1"
+version = "0.2.0"
 license = { file = "LICENSE" }
+requires-python = ">=3.9"
+classifiers = ["Operating System :: OS Independent"]
 dependencies = []
 
 [project.urls]
@@ -14,4 +16,5 @@ Documentation = "https://modelrunner.ai/docs"
 PublisherId = "modelrunner"
 DisplayName = "ModelRunner"
 Icon = "https://raw.githubusercontent.com/modelrunner/modelrunner-comfyui/main/assets/icon.png"
+requires-comfyui = ">=0.12.1"
 includes = []
