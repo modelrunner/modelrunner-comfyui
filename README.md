@@ -123,7 +123,7 @@ field that only `extra_json` can set. The deny-list is not in the repo: set
 the `MODELRUNNER_DENYLIST` repository secret.
 
 To release, bump `version` in `pyproject.toml` (and `VERSION` in
-`modelrunner_nodes/client.py`), commit, then push a matching tag (`v0.2.0`).
+`modelrunner_nodes/client.py`), commit, then push a matching tag (`v0.2.1`).
 The tag publishes to the Comfy Registry. `.comfyignore` keeps `scripts/`, CI
 files and `assets/` out of the published zip, so only the files ComfyUI loads
 are scanned and shipped.

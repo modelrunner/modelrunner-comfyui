@@ -12,14 +12,17 @@ import logging
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 APP_TAG = "modelrunner-comfyui"
-API_BASE = os.environ.get("MODELRUNNER_API_BASE", "https://modelrunner.run").rstrip("/")
-QUEUE_BASE = os.environ.get("MODELRUNNER_QUEUE_BASE", "https://queue.modelrunner.run").rstrip("/")
+# Fixed on purpose: the API key goes only to these hosts, so no setting may redirect it.
+API_BASE = "https://modelrunner.run"
+QUEUE_BASE = "https://queue.modelrunner.run"
+KEYED_HOSTS = {"modelrunner.run", "queue.modelrunner.run"}
 KEY_FILE = Path(__file__).resolve().parent.parent / "modelrunner_api_key.txt"
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED"}
 UPLOAD_CACHE_TTL = 3600  # seconds; uploads expire under the account's retention setting
@@ -54,11 +57,33 @@ def _headers(json_body: bool = True) -> dict:
     return h
 
 
+def _is_keyed_host(url: str) -> bool:
+    parts = urllib.parse.urlsplit(url)
+    return parts.scheme == "https" and parts.hostname in KEYED_HOSTS
+
+
+class _KeyStaysOnApiHosts(urllib.request.HTTPRedirectHandler):
+    """urllib copies every header, the key included, onto a redirect. Drop the key
+    when a redirect leaves the API hosts."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and not _is_keyed_host(newurl):
+            new.remove_header("Authorization")
+        return new
+
+
+_opener = urllib.request.build_opener(_KeyStaysOnApiHosts)
+
+
 def _request(method: str, url: str, body: Any = None, headers: Optional[dict] = None, timeout: int = 60) -> Any:
+    if headers is None and not _is_keyed_host(url):
+        # Status and result URLs come from the API response; never follow one elsewhere with the key.
+        raise ModelRunnerError(f"Refusing to send the API key to {url}: not a ModelRunner API host.")
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method, headers=headers if headers is not None else _headers())
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _opener.open(req, timeout=timeout) as resp:
             raw = resp.read()
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:500]
