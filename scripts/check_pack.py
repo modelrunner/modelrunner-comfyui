@@ -64,6 +64,15 @@ def main() -> int:
             if words.search(line):
                 failures.append(f"denied word in {rel}:{n}")
 
+    # Commit messages are public too once the repo is pushed.
+    log = subprocess.run(["git", "log", "--format=%H%n%B"], cwd=ROOT, capture_output=True, text=True).stdout
+    sha = ""
+    for line in log.splitlines():
+        if len(line) == 40 and all(c in "0123456789abcdef" for c in line):
+            sha = line
+        elif words.search(line):
+            failures.append(f"denied word in the message of commit {sha[:8]}")
+
     print(f"catalog rows: {len(models)}  typed nodes: {len(typed)}  "
           f"left to the generic node: {len(models) - len(typed)}  widgets/sockets: {widgets}")
     print(f"extra_json-only fields: {len(report['fields'])} across {len(report['models'])} models")

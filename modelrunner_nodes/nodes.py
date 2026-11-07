@@ -171,6 +171,11 @@ class _ModelNode:
         return float("nan") if force_rerun else ""
 
     def _payload(self, kwargs: dict) -> dict:
+        # Fail before any upload when a required text field (prompt, video URL, ...) is still empty.
+        missing = [p.name for p in self.PLANS if p.required and p.comfy_type == "STRING"
+                   and not str(kwargs.get(p.name) or "").strip()]
+        if missing:
+            raise client.ModelRunnerError(f"{self.ENDPOINT}: fill in {', '.join(missing)} (required).")
         payload: dict = {}
         for p in self.PLANS:
             if p.kind == "object" and p.children:
