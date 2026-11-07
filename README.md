@@ -85,6 +85,9 @@ this pack was released. Current prices are on the model page.
   going and is charged if it completes. Find it later by its request ID in your
   dashboard at https://modelrunner.ai.
 - A failed run is not charged.
+- The cost printed before a run is the model's recent average. Many video and
+  audio models charge per second of output, so a longer clip (more frames, or a
+  lower fps for the same frames) costs more than that average.
 
 ## Privacy
 
