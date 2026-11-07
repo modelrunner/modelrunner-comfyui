@@ -11,7 +11,7 @@ Documentation = "https://modelrunner.ai/docs"
 "Bug Tracker" = "https://github.com/modelrunner/modelrunner-comfyui/issues"
 
 [tool.comfy]
-PublisherId = "REPLACE_WITH_REGISTRY_PUBLISHER_ID"
+PublisherId = "modelrunner"
 DisplayName = "ModelRunner"
-Icon = ""  # REPLACE with the ModelRunner brand mark URL (square, 400x400)
+Icon = "https://modelrunner.ai/logo-only-512px.png"
 includes = []
