@@ -1,7 +1,7 @@
 # ModelRunner for ComfyUI
 
 Run hundreds of image, video, audio and 3D AI models from ComfyUI with one
-[ModelRunner](https://modelrunner.ai) API key and one balance. No local GPU and
+[ModelRunner](https://modelrunner.ai/comfyui) API key and one balance. No local GPU and
 no model downloads: each node sends its inputs to ModelRunner and returns the
 result to your graph.
 

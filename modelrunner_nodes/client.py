@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 APP_TAG = "modelrunner-comfyui"
 # Fixed on purpose: the API key goes only to these hosts, so no setting may redirect it.
 API_BASE = "https://modelrunner.run"
