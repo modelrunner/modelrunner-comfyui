@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-VERSION = "0.2.3"
+VERSION = "0.2.4"
 APP_TAG = "modelrunner-comfyui"
 # Fixed on purpose: the API key goes only to these hosts, so no setting may redirect it.
 API_BASE = "https://modelrunner.run"
@@ -103,9 +103,21 @@ def _request(method: str, url: str, body: Any = None, headers: Optional[dict] = 
     return json.loads(raw) if raw else None
 
 
+_ENDPOINT = re.compile(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+")
+
+
+def _endpoint_path(endpoint: str) -> str:
+    """The endpoint as a URL path. It can come from a workflow, so it must be a plain
+    owner/alias path: nothing that adds a query, a fragment or a parent step to a keyed URL."""
+    path = endpoint.strip().strip("/")
+    if not _ENDPOINT.fullmatch(path) or any(set(part) == {"."} for part in path.split("/")):
+        raise ModelRunnerError(f"{endpoint!r} is not a model endpoint. Use owner/alias, as in a modelrunner.ai model URL.")
+    return path
+
+
 def submit(endpoint: str, payload: dict) -> dict:
     """Queue a run. Returns {request_id, status_url, response_url, ...}."""
-    return _request("POST", f"{QUEUE_BASE}/{endpoint.strip('/')}", payload)
+    return _request("POST", f"{QUEUE_BASE}/{_endpoint_path(endpoint)}", payload)
 
 
 def run(
@@ -163,8 +175,9 @@ def is_chat(endpoint: str) -> bool:
     queue (language models are). Read from the public model row; a failed read
     means False, and the queue's own error then names the right route."""
     if endpoint not in _chat_cache:
+        url = f"{API_BASE}/models/{_endpoint_path(endpoint)}"
         try:
-            row = _request("GET", f"{API_BASE}/models/{endpoint}",
+            row = _request("GET", url,
                            headers={"User-Agent": f"{APP_TAG}/{VERSION}", "Accept": "application/json"}, timeout=15)
             _chat_cache[endpoint] = ((row or {}).get("providerRequestConfig") or {}).get("apiType") == "chat_completions"
         except ModelRunnerError:
@@ -175,7 +188,7 @@ def is_chat(endpoint: str) -> bool:
 def chat(endpoint: str, body: dict, timeout: int = 600) -> dict:
     """One synchronous chat completion. `body` is an OpenAI-style request
     ({"messages": [...], ...}); returns {request_id, output: {content, ...}}."""
-    completion = _request("POST", f"{QUEUE_BASE}/{endpoint.strip('/')}/chat/completions",
+    completion = _request("POST", f"{QUEUE_BASE}/{_endpoint_path(endpoint)}/chat/completions",
                           {**body, "stream": False}, timeout=timeout) or {}
     choice = (completion.get("choices") or [{}])[0]
     message = choice.get("message") or {}
