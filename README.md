@@ -14,7 +14,7 @@ result to your graph.
   take an OpenAI-style body (`{"messages": [{"role": "user", "content": "..."}]}`)
   and return the reply in `output_json`.
 - **ModelRunner Upload Image** turns an IMAGE into a URL for any URL input, and
-  **ModelRunner Download Image** turns URLs back into an IMAGE.
+  **ModelRunner Download Image** turns public `https` URLs back into an IMAGE.
 
 Browse the catalog, with prices and examples, at https://modelrunner.ai/models.
 

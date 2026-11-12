@@ -133,7 +133,9 @@ def save_output(url: str, request_id: str, fallback_ext: str, index: int = 0) ->
     folder = base / "modelrunner"
     folder.mkdir(parents=True, exist_ok=True)
     suffix = f"-{index}" if index else ""
-    path = folder / f"{request_id}{suffix}.{_ext(url, fallback_ext)}"
+    # The request ID comes from the API response; keep it from naming a path outside the folder.
+    stem = re.sub(r"[^A-Za-z0-9_-]", "_", str(request_id)) or "result"
+    path = folder / f"{stem}{suffix}.{_ext(url, fallback_ext)}"
     path.write_bytes(client.download(url))
     return str(path)
 
@@ -253,10 +255,14 @@ class _ModelNode:
             raise client.ModelRunnerError(
                 f"Request {request_id} completed without an output URL: {json.dumps(result.get('output'))[:300]}")
         joined = "\n".join(urls)
-        if self.KIND == "image":
-            images, mask = urls_to_images(urls)
-            return (images, mask, joined, request_id)
-        paths = [save_output(u, request_id, FALLBACK_EXT[self.KIND], i) for i, u in enumerate(urls)]
+        try:
+            if self.KIND == "image":
+                images, mask = urls_to_images(urls)
+                return (images, mask, joined, request_id)
+            paths = [save_output(u, request_id, FALLBACK_EXT[self.KIND], i) for i, u in enumerate(urls)]
+        except (client.ModelRunnerError, OSError) as e:
+            # The run is already paid for: name its results so a failed download does not lose them.
+            raise client.ModelRunnerError(f"{e} Request {request_id} completed; its results: {joined}") from None
         files = ("\n".join(paths), joined, request_id)
         # The typed first output exists only when OUTPUTS gave this kind one (see _typed_first).
         if self.KIND == "audio":

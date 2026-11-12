@@ -7,9 +7,13 @@ upload URL was signed for.
 from __future__ import annotations
 
 import hashlib
+import http.client
+import ipaddress
 import json
 import logging
 import os
+import re
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -17,7 +21,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 APP_TAG = "modelrunner-comfyui"
 # Fixed on purpose: the API key goes only to these hosts, so no setting may redirect it.
 API_BASE = "https://modelrunner.run"
@@ -225,10 +229,118 @@ def upload_bytes(data: bytes, file_name: str, content_type: str) -> str:
     return init["file_url"]
 
 
+# Downloads fetch URLs that a shared workflow or a model's output can choose, so they are
+# held to public https hosts: a workflow must not make this machine read its own network.
+# A DNS answer in 198.18.0.0/15 is accepted because fake-IP proxy tools (Clash, Surge,
+# sing-box) answer every hostname from it. The range is reserved for benchmarking (RFC 2544)
+# and not expected on a LAN; a URL that names such an address directly is still refused.
+_FAKE_IP_NET = ipaddress.ip_network("198.18.0.0/15")
+_NAT64_NET = ipaddress.ip_network("64:ff9b::/96")
+_NAT64_LOCAL_NET = ipaddress.ip_network("64:ff9b:1::/48")
+# Top-level names that only ever mean this machine or its local network.
+_LOCAL_TLDS = {"localhost", "localdomain", "local", "internal", "intranet", "lan", "home", "corp", "arpa",
+               "test", "invalid"}
+_HOST_PORT = re.compile(r"(?:\[([0-9A-Fa-f:.]+)\]|([A-Za-z0-9._-]+))(?::\d*)?")
+# A dotted name whose last label starts with a letter, so no numeric address form passes as a name.
+_DNS_NAME = re.compile(r"(?:[A-Za-z0-9_-]+\.)+([A-Za-z][A-Za-z0-9-]*)\.?")
+
+
+def _is_public_ip(text: str, dns_answer: bool = False) -> bool:
+    try:
+        ip = ipaddress.ip_address(text.split("%")[0])
+    except ValueError:
+        return False
+    if ip.version == 6:
+        # An IPv4 address carried inside an IPv6 one is judged as that IPv4 address.
+        inner = ip.ipv4_mapped or ip.sixtofour
+        if inner is None and (ip in _NAT64_NET or int(ip) >> 32 == 0):
+            inner = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        if inner is not None:
+            ip = inner
+        elif ip.is_site_local or ip in _NAT64_LOCAL_NET:
+            return False
+    return (ip.is_global and not ip.is_multicast) or (dns_answer and ip in _FAKE_IP_NET)
+
+
+def _require_public_host(netloc: str) -> None:
+    """Refuse a host that names this machine or a private network. `netloc` is urllib's own
+    unquoted host[:port], the exact string that gets connected or handed to a proxy."""
+    m = _HOST_PORT.fullmatch(netloc or "")
+    host = (m.group(1) or m.group(2)) if m else ""
+    try:
+        ipaddress.ip_address(host)
+        ok = _is_public_ip(host)
+    except ValueError:
+        name = _DNS_NAME.fullmatch(host) if m and not m.group(1) else None
+        ok = name is not None and name.group(1).lower() not in _LOCAL_TLDS
+    if not ok:
+        raise ModelRunnerError(f"Refusing to download from {netloc!r}: not a public internet host.")
+
+
+def _connect_public(address, timeout, source_address=None):
+    """socket.create_connection, but only to addresses it has checked itself, so a DNS
+    answer cannot change between the check and the connection."""
+    host, port = address
+    addresses = [info[4][0] for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)]
+    addresses = [a for a in addresses if _is_public_ip(a, dns_answer=True)]
+    if not addresses:
+        raise ModelRunnerError(f"Refusing to download from {host!r}: it resolves to a private or local address.")
+    error = None
+    for ip in addresses:
+        try:
+            return socket.create_connection((ip, port), timeout, source_address)
+        except OSError as e:
+            error = e
+    raise error
+
+
+class _PublicHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        # Through a proxy the socket goes to the proxy, which resolves the host itself;
+        # the host string was checked in https_request and TLS still verifies its name.
+        direct = not self._tunnel_host
+        if direct:
+            self._create_connection = _connect_public
+        super().connect()
+        # Backstop on the real peer, in case http.client ever stops using _create_connection.
+        if direct and not _is_public_ip(self.sock.getpeername()[0], dns_answer=True):
+            self.close()
+            raise ModelRunnerError(f"Refusing to download from {self.host!r}: connected to a private or local address.")
+
+
+class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_request(self, req):
+        # Runs for the first URL and for every redirect, before a proxy rewrites the host.
+        if urllib.parse.urlsplit(req.full_url).scheme != "https":
+            raise ModelRunnerError(f"Refusing to download {req.full_url}: only https URLs are fetched.")
+        _require_public_host(req.host)
+        return super().https_request(req)
+
+    def https_open(self, req):
+        return self.do_open(_PublicHTTPSConnection, req, context=self._context)
+
+
+# Built by hand so that https is the only scheme it can open: a redirect to http, ftp or
+# file has no handler to go to. The proxy handler is given the https proxy alone, because
+# it would otherwise open the scheme of every *_proxy setting itself.
+_https_proxy = {k: v for k, v in urllib.request.getproxies().items() if k == "https"}
+_download_opener = urllib.request.OpenerDirector()
+for _handler in (urllib.request.ProxyHandler(_https_proxy), _PublicHTTPSHandler(), urllib.request.HTTPRedirectHandler(),
+                 urllib.request.HTTPDefaultErrorHandler(), urllib.request.HTTPErrorProcessor(),
+                 urllib.request.UnknownHandler()):
+    _download_opener.add_handler(_handler)
+
+
 def download(url: str, timeout: int = 300) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": f"{APP_TAG}/{VERSION}"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read()
+    """Fetch a result or image URL: https on a public host only, on every hop of a redirect."""
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise ModelRunnerError(f"Refusing to download {url}: only https URLs are fetched.")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": f"{APP_TAG}/{VERSION}"})
+        with _download_opener.open(req, timeout=timeout) as resp:
+            return resp.read()
+    except (http.client.HTTPException, ValueError) as e:  # a truncated body, a malformed URL
+        raise ModelRunnerError(f"Download of {url} failed: {e!r}") from None
 
 
 _estimate_cache: dict[str, Optional[str]] = {}
