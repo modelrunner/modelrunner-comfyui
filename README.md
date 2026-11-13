@@ -5,6 +5,8 @@ Run hundreds of image, video, audio and 3D AI models from ComfyUI with one
 no model downloads: each node sends its inputs to ModelRunner and returns the
 result to your graph.
 
+Setup and usage guide: <https://modelrunner.ai/docs/guides/comfyui>
+
 - **One typed node per model.** Every image, video, audio and 3D model in the
   catalog gets its own node with real widgets: dropdowns for options, number
   fields with their limits, image and audio sockets for file inputs. Find them
